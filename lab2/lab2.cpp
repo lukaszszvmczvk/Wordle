@@ -12,24 +12,30 @@
 #include <fstream>
 #include <algorithm>
 #include <map>
+#include <chrono>
 
 #define MAX_LOADSTRING 100
 
+using namespace std::chrono;
 
 const double FIELD=55;
 const double INTERVAL=6;
 const double MARGIN=10;
+
 std::map<HWND, std::string> map;
 std::map<HWND, int> result;
 std::vector<HWND> v;
 std::vector<TCHAR> letters;
 std::map<std::pair<HWND, char>, int> letterColors;
+std::map<std::pair<int, int>, steady_clock::time_point> animation;
+std::map<HWND, int> finish;
 
-
+int counter = 0;
 int xPos = 0;
 int yPos = 0;
 
-
+int speed = 400;
+int delay = 150;
 // Global Variables:
 HINSTANCE hInst;                                // current instance
 WCHAR szTitle[MAX_LOADSTRING];    
@@ -55,6 +61,7 @@ void ColorKeboard(HDC hdc, HWND hWnd);
 void ColorEasy(char c, double x, double y, HDC hdc);
 void ColorMedium(char c, double x, double y, HDC hdc);
 void ColorHard(char c, double x, double y, HDC hdc);
+void ClearVariables();
 
 std::vector <std::string> words;
 void ReadFile()
@@ -106,15 +113,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     return (int) msg.wParam;
 }
 
-
-
-
 ATOM MyRegisterClass(HINSTANCE hInstance)
 {
     WNDCLASSEXW wcex;
-
     wcex.cbSize = sizeof(WNDCLASSEX);
-
     wcex.style          = CS_HREDRAW | CS_VREDRAW;
     wcex.lpfnWndProc    = WndProc;
     wcex.cbClsExtra     = 0;
@@ -128,9 +130,7 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
     wcex.hIconSm        = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_ICON1));
 
     WNDCLASS wcex2;
-
     LoadStringW(hInstance, IDS_APP_TITLE2, szTitle2, MAX_LOADSTRING);
-
     wcex2.style = CS_HREDRAW | CS_VREDRAW;
     wcex2.lpfnWndProc = WndProcChild;
     wcex2.cbClsExtra = 0;
@@ -189,6 +189,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     srand(time(NULL));
     switch (message)
     {
+    // zrodlo: https://stackoverflow.com/questions/7773771/how-do-i-implement-dragging-a-window-using-its-client-area
+    case WM_NCHITTEST:
+    {
+        LRESULT hit = DefWindowProc(hWnd, message, wParam, lParam);
+        if (hit == HTCLIENT) hit = HTCAPTION;
+        return hit;
+    }
+    break;
     case WM_SIZE:
     {
         int clientWidth = LOWORD(lParam);
@@ -196,141 +204,87 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         HDC hdc = GetDC(hWnd);
         if (offOldBitmap != NULL) {
               SelectObject(offDC, offOldBitmap);
-             
         }
         if (offBitmap != NULL) {
            DeleteObject(offBitmap);
-          
         }
         offBitmap = CreateCompatibleBitmap(hdc, clientWidth, clientHeight);
         offOldBitmap = (HBITMAP)SelectObject(offDC, offBitmap);
-        ReleaseDC(hWnd, hdc);
-        
+        ReleaseDC(hWnd, hdc); 
     }
        break;
 
     case WM_CREATE:
     {
+        //SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+        SetTimer(hWnd, 7, 10, NULL);
         HDC hdc = GetDC(hWnd);
         offDC = CreateCompatibleDC(hdc);
         ReleaseDC(hWnd, hdc);
-        srand(time(NULL));
-        int glvl;
-        char str[10];
+        char str[2];
         int length;
         std::string lvl = "";
-        length = GetPrivateProfileStringA("wordle", "level", "", str, 10, "../settings.ini");
+        length = GetPrivateProfileStringA("wordle", "level", "", str, 2, ".\\settings.ini");
         if (length == 0)
         {
-            glvl = rand() % 3+1;
+            char T[] = { '1','2','3' };
+            str[0] = T[rand() % 3];
         }
-        else
-        {
-            for (int i = 0; i < length; ++i)
-                lvl += str[i];
-            glvl = atoi(lvl.c_str());
-        }
-        if (glvl == 1)
-        {
-            HMENU menu = GetMenu(hWnd);
-            CheckMenuItem(menu, ID_DIFFICULTY_EASY, MF_CHECKED);
-            CheckMenuItem(menu, ID_DIFFICULTY_MEDIUM, MF_UNCHECKED);
-            CheckMenuItem(menu, ID_DIFFICULTY_HARD, MF_UNCHECKED);
-            CreateEasyWindow(hWnd);
-        }
-        else if(glvl == 3)
-        { 
-            HMENU menu = GetMenu(hWnd);
-            CheckMenuItem(menu, ID_DIFFICULTY_EASY, MF_UNCHECKED);
-            CheckMenuItem(menu, ID_DIFFICULTY_MEDIUM, MF_UNCHECKED);
-            CheckMenuItem(menu, ID_DIFFICULTY_HARD, MF_CHECKED);
-            CreateHardWindow(hWnd);
-        }
-        else
-        {
-            HMENU menu = GetMenu(hWnd);
-            CheckMenuItem(menu, ID_DIFFICULTY_EASY, MF_UNCHECKED);
-            CheckMenuItem(menu, ID_DIFFICULTY_MEDIUM, MF_CHECKED);
-            CheckMenuItem(menu, ID_DIFFICULTY_HARD, MF_UNCHECKED);
-            CreateMediumWindow(hWnd);
-        }
-
+        if (str[0] == '1')
+            SendMessage(hWnd, WM_COMMAND, ID_DIFFICULTY_EASY, NULL);
+        if(str[0]=='2')
+            SendMessage(hWnd, WM_COMMAND, ID_DIFFICULTY_MEDIUM, NULL);
+        if(str[0]=='3')
+            SendMessage(hWnd, WM_COMMAND, ID_DIFFICULTY_HARD, NULL);
         return 0;
+    }
+    break;
+    case WM_TIMER:
+    {
+        for (int i = 0; i < v.size(); ++i)
+            InvalidateRect(v[i], NULL, true);
     }
     break;
     case WM_COMMAND:
         {
             int wmId = LOWORD(wParam);
-            // Parse the menu selections:
             switch (wmId)
             {
             case ID_DIFFICULTY_EASY:
             {
-                for (int i = 0; i < v.size(); ++i)
-                    DestroyWindow(v[i]);
-                v.clear();
-                letters.clear();
-                letterColors.clear();
+                ClearVariables();
                 InvalidateRect(hWnd, NULL, TRUE);
-
-                xPos = yPos = 0;
                 HMENU menu = GetMenu(hWnd);
                 CheckMenuItem(menu, ID_DIFFICULTY_EASY, MF_CHECKED);
                 CheckMenuItem(menu, ID_DIFFICULTY_MEDIUM, MF_UNCHECKED);
                 CheckMenuItem(menu, ID_DIFFICULTY_HARD, MF_UNCHECKED);
-
                 CreateEasyWindow(hWnd);
 
             }
             break;
             case ID_DIFFICULTY_MEDIUM:
             {
-                for (int i = 0; i < v.size(); ++i)
-                    DestroyWindow(v[i]);
-                v.clear();
-                letters.clear();
-                letterColors.clear();
+                ClearVariables();
                 InvalidateRect(hWnd, NULL, TRUE);
-
-                xPos = yPos = 0;
-
                 HMENU menu = GetMenu(hWnd);
                 CheckMenuItem(menu, ID_DIFFICULTY_EASY, MF_UNCHECKED);
                 CheckMenuItem(menu, ID_DIFFICULTY_MEDIUM, MF_CHECKED);
                 CheckMenuItem(menu, ID_DIFFICULTY_HARD, MF_UNCHECKED);
-
                 CreateMediumWindow(hWnd);
-                //time = 0.0;
 
             }
             break;
             case ID_DIFFICULTY_HARD:
             {
-                for (int i = 0; i < v.size(); ++i)
-                    DestroyWindow(v[i]);
-                v.clear();
-                letters.clear();
-                letterColors.clear();
+                ClearVariables();
                 InvalidateRect(hWnd, NULL, TRUE);
-
-                xPos = yPos = 0;
-
                 HMENU menu = GetMenu(hWnd);
                 CheckMenuItem(menu, ID_DIFFICULTY_EASY, MF_UNCHECKED);
                 CheckMenuItem(menu, ID_DIFFICULTY_MEDIUM, MF_UNCHECKED);
                 CheckMenuItem(menu, ID_DIFFICULTY_HARD, MF_CHECKED);
-
                 CreateHardWindow(hWnd);
-                //time = 0.0;
-
             }
             break;
-            //case IDM_ABOUT:
-            //    DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
-            //    break;
-            //case IDM_EXIT:
-            //    DestroyWindow(hWnd);
-            //    break;
             default:
                 return DefWindowProc(hWnd, message, wParam, lParam);
             }
@@ -368,7 +322,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 _T(" Verdana "));
             HFONT oldFont = (HFONT)SelectObject(offDC, font);
             
-
             ColorKeboard(offDC, hWnd);
 
             BitBlt(hdc, 0, 0, rc.right, rc.bottom, offDC, 0, 0, SRCCOPY);
@@ -426,7 +379,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 }
             }
         }
-        else if (xPos<5)
+        else if (xPos<5 && (wParam>='A' && wParam<='z'))
         {
             letters.push_back((TCHAR)toupper(wParam));
             ++xPos;
@@ -450,11 +403,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             DeleteObject(offBitmap);
         }
         if (v.size() == 1)
-            WritePrivateProfileStringA("wordle", "level", "1", "../settings.ini");
+            WritePrivateProfileStringA("wordle", "level", "1", ".\\settings.ini");
         if (v.size() == 2)
-            WritePrivateProfileStringA("wordle", "level", "2", "../settings.ini");
+            WritePrivateProfileStringA("wordle", "level", "2", ".\\settings.ini");
         if (v.size() == 4)
-            WritePrivateProfileStringA("wordle", "level", "3", "../settings.ini");
+            WritePrivateProfileStringA("wordle", "level", "3", ".\\settings.ini");
         PostQuitMessage(0);
     }
         break;
@@ -491,8 +444,16 @@ LRESULT CALLBACK WndProcChild(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
         HDC hdc = GetDC(hWnd);
         offDC = CreateCompatibleDC(hdc);
         ReleaseDC(hWnd, hdc);
+        //timers[hWnd] = timer++;
+        //SetTimer(hWnd, 7, 10, NULL);
         break;
      }
+    case WM_TIMER:
+    {
+        //if(wParam==7)
+        //    InvalidateRect(hWnd, NULL, true);
+        break;
+    }
     case WM_SIZE:
     {
             int clientWidth = LOWORD(lParam);
@@ -518,16 +479,16 @@ LRESULT CALLBACK WndProcChild(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
         HDC hdc = BeginPaint(hWnd, &ps);
         HPEN pen = CreatePen(PS_SOLID, 2, RGB(164, 174, 196));
         HPEN oldPen = (HPEN)SelectObject(offDC, pen);
-        if (result[hWnd] == 4)
-        {
-            EndPaint(hWnd, &ps);
-            break;
-        }
-        if (result[hWnd] == 3)
-        {
-            EndPaint(hWnd, &ps);
-            break;
-        }
+        //if (result[hWnd] == 4)
+        //{
+        //    EndPaint(hWnd, &ps);
+        //    break;
+        //}
+        //if (result[hWnd] == 3)
+        //{
+        //    EndPaint(hWnd, &ps);
+        //    break;
+        //}
 
         RECT rc;
         GetClientRect(hWnd, &rc);
@@ -538,7 +499,7 @@ LRESULT CALLBACK WndProcChild(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
         DeleteObject(backgroundBrush);
 
         HFONT font = CreateFont(
-            -MulDiv(20, GetDeviceCaps(offDC, LOGPIXELSY), 72), // Height
+            -MulDiv(12, GetDeviceCaps(offDC, LOGPIXELSY), 72), // Height
             0,
             0,
             0,
@@ -571,46 +532,60 @@ LRESULT CALLBACK WndProcChild(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
             PrintPuzzle(offDC, 10, word, hWnd);
         }
 
-        std::string str = map[hWnd];
-        TCHAR s[6];
-        s[str.size()] = 0;
-        std::copy(str.begin(), str.end(), s);
-        _stprintf_s(buf, bufSize, _T("Poprawne haslo: %s"), s);
-        SetWindowText(hWnd, buf);
+        //std::string str = map[hWnd];
+        //TCHAR s[6];
+        //s[str.size()] = 0;
+        //std::copy(str.begin(), str.end(), s);
+        //_stprintf_s(buf, bufSize, _T("Poprawne haslo: %s"), s);
+        //SetWindowText(hWnd, buf);
 
         if (result[hWnd] == 0)
         {
-            HBITMAP bitmap = LoadBitmap(hInst,
-                MAKEINTRESOURCE(IDB_BITMAP1));
-            HDC memDC = CreateCompatibleDC(offDC);
-            HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, bitmap);
-            BLENDFUNCTION bf = { AC_SRC_OVER, 0, 150, 0 };
-            AlphaBlend(offDC, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, memDC, 0, 0, rc.right - rc.left, rc.bottom - rc.top, bf);
-            SetTextColor(offDC, RGB(255, 255, 255));
-            TCHAR s[6];
-            s[map[hWnd].size()] = 0;
-            for (int i = 0; i < map[hWnd].size(); ++i)
-                s[i] = toupper(map[hWnd][i]);
-            DrawText(offDC, s, 5, &rc, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
-            SetTextColor(offDC, RGB(0,0,0));
-            SelectObject(memDC, oldBitmap);
-            DeleteObject(bitmap);
-            result[hWnd] = 3;
+            int i = 5;
+            if (v.size() == 4)
+                i = 9;
+            if (v.size() == 2)
+                i = 7;
+            auto dur = duration_cast<milliseconds>(steady_clock::now() - animation[std::make_pair(i, 4)]).count();
+            if (dur >= speed + 4 * delay)
+            {
+                HBITMAP bitmap = LoadBitmap(hInst,
+                    MAKEINTRESOURCE(IDB_BITMAP1));
+                HDC memDC = CreateCompatibleDC(offDC);
+                HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, bitmap);
+                BLENDFUNCTION bf = { AC_SRC_OVER, 0, 150, 0 };
+                AlphaBlend(offDC, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, memDC, 0, 0, rc.right - rc.left, rc.bottom - rc.top, bf);
+                SetTextColor(offDC, RGB(255, 255, 255));
+                TCHAR s[6];
+                s[map[hWnd].size()] = 0;
+                for (int i = 0; i < map[hWnd].size(); ++i)
+                    s[i] = toupper(map[hWnd][i]);
+                DrawText(offDC, s, 5, &rc, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+                SetTextColor(offDC, RGB(0,0,0));
+                SelectObject(memDC, oldBitmap);
+                DeleteObject(bitmap);
+
+            }
+            //result[hWnd] = 3;
         }
         if (result[hWnd] == 1)
         {
-            HBITMAP bitmap = LoadBitmap(hInst,
-                MAKEINTRESOURCE(IDB_BITMAP2));
-            HDC memDC = CreateCompatibleDC(offDC);
-            HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, bitmap);
-            BLENDFUNCTION bf = { AC_SRC_OVER, 0, 150, 0 };
-            AlphaBlend(offDC, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, memDC, 0, 0, rc.right - rc.left, rc.bottom - rc.top, bf);
-            SetTextColor(offDC, RGB(255, 255, 255));
-            DrawText(offDC, L"WYGRANA", 8, &rc, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
-            SetTextColor(offDC, RGB(0, 0, 0));
-            SelectObject(memDC, oldBitmap);
-            DeleteObject(bitmap);
-            result[hWnd] = 4;
+            auto dur = duration_cast<milliseconds>(steady_clock::now() - animation[std::make_pair(finish[hWnd], 4)]).count();
+            if (dur >= speed + 4 * delay)
+            {
+                HBITMAP bitmap = LoadBitmap(hInst,
+                    MAKEINTRESOURCE(IDB_BITMAP2));
+                HDC memDC = CreateCompatibleDC(offDC);
+                HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, bitmap);
+                BLENDFUNCTION bf = { AC_SRC_OVER, 0, 150, 0 };
+                AlphaBlend(offDC, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, memDC, 0, 0, rc.right - rc.left, rc.bottom - rc.top, bf);
+                SetTextColor(offDC, RGB(255, 255, 255));
+                DrawText(offDC, L"WYGRANA", 8, &rc, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+                SetTextColor(offDC, RGB(0, 0, 0));
+                SelectObject(memDC, oldBitmap);
+                DeleteObject(bitmap);
+            }
+            //result[hWnd] = 4;
         }
 
 
@@ -626,15 +601,12 @@ LRESULT CALLBACK WndProcChild(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
     {
         if (offOldBitmap != NULL) {
             SelectObject(offDC, offOldBitmap);
-        
         }
         if (offDC != NULL) {
             DeleteDC(offDC);
-        
         }
         if (offBitmap != NULL) {
             DeleteObject(offBitmap);
-        
         }
         //PostQuitMessage(0);
     }
@@ -658,6 +630,7 @@ void CreateEasyWindow(HWND hWnd)
     int x = rand() % words.size();
     map[h] = words[x];
     result[h] = -1;
+    finish[h] = 10;
 }
 void CreateMediumWindow(HWND hWnd)
 {
@@ -681,7 +654,7 @@ void CreateMediumWindow(HWND hWnd)
         y = rand() % words.size();
     map[h2] = words[y];
     result[h1] = result[h2] = - 1;
-
+    finish[h1] = finish[h2] = 10;
 }
 void CreateHardWindow(HWND hWnd)
 {
@@ -700,10 +673,8 @@ void CreateHardWindow(HWND hWnd)
         xPos + width, yPos - height/5, width, height, hWnd, NULL, NULL, NULL);
     h[3] = CreateWindow(L"child_window", szTitle2, WS_VISIBLE,
         xPos + width, yPos + height/5, width, height, hWnd, NULL, NULL, NULL);
-    v.push_back(h[0]);
-    v.push_back(h[1]);
-    v.push_back(h[2]);
-    v.push_back(h[3]);
+    for (int i = 0; i < 4; ++i)
+        v.push_back(h[i]);
 
     int x = rand() % words.size();
     map[h[0]] = words[x];
@@ -720,10 +691,13 @@ void CreateHardWindow(HWND hWnd)
         p = rand() % words.size();
     map[h[3]] = words[p];
     result[h[0]] = result[h[1]] = result[h[2]] = result[h[3]] = -1;
+    finish[h[0]] = finish[h[1]] = finish[h[2]] = finish[h[3]] = 10;
 }
 
-void PrintPuzzle(HDC hdc,int level,std::string word,HWND hWnd)
+void PrintPuzzle(HDC hdc,int level,std::string word, HWND hWnd)
 {
+    float ms = 400;
+    float h = 100;
     for (int i = 0; i < level; ++i)
         for (int j = 0; j < 5; ++j)
         {
@@ -732,13 +706,39 @@ void PrintPuzzle(HDC hdc,int level,std::string word,HWND hWnd)
             double y = MARGIN + i * (FIELD + INTERVAL);
             RECT rc = { x,y,x + FIELD,y + FIELD };
             int z = i * 5 + j;
-            if (i >= yPos)
+            float rot = 0;
+            if (i >= yPos || i>finish[hWnd])
             {
                 brush = CreateSolidBrush(RGB(251, 252, 255));
                 oldBrush = (HBRUSH)SelectObject(hdc, brush);
             }
             else
             {
+                if(animation.find(std::make_pair(i, j))==animation.end())
+                    animation[std::make_pair(i, j)] = steady_clock::now();
+                else
+                {
+                    auto dur = duration_cast<milliseconds>(steady_clock::now() - animation[std::make_pair(i, j)]).count();
+                    if (dur>j*delay && dur < speed/2+j*delay)
+                    {
+                        float f = FIELD / 2;
+                        float t = dur - j*delay;
+                        t = t / (speed/2);
+                        rot = f * t;
+                    }
+                    else if(dur>=speed/2+j*delay && dur<speed+j*delay)
+                    {
+                        float f = FIELD / 2;
+                        float t = (speed - (dur-j*delay));
+                        t = t / (speed/2);
+                        rot = f * t;
+                    }
+                    else
+                    {
+                        rot = 0;
+                    }
+                }
+
                 if (word[j] == tolower(letters[z]))
                 {
                     letterColors[std::make_pair(hWnd, letters[z])] = 1;
@@ -758,9 +758,9 @@ void PrintPuzzle(HDC hdc,int level,std::string word,HWND hWnd)
                     oldBrush = (HBRUSH)SelectObject(hdc, brush);
                 }
             }
-            RoundRect(hdc, x, y,
-                x + FIELD,y + FIELD, 10, 10);
-            if(z<letters.size())
+            RoundRect(hdc, x,y+rot,
+                x + FIELD,y + FIELD-rot, 10, 10);
+            if(z<letters.size() && i<=finish[hWnd])
                 DrawText(hdc, &letters[z], 1, &rc, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
             SelectObject(hdc, oldBrush);
             DeleteObject(brush);
@@ -776,6 +776,7 @@ void CheckResults(std::string str)
         if (map[v[i]] == str)
         {
             result[v[i]] = 1;
+            finish[v[i]] = counter;
         }
         else
         {
@@ -793,6 +794,7 @@ void CheckResults(std::string str)
             }
         }
     }
+    ++counter;
 }
 void ColorKeboard(HDC hdc, HWND hWnd)
 {
@@ -800,7 +802,6 @@ void ColorKeboard(HDC hdc, HWND hWnd)
     WCHAR secondRow[] = { 'A','S','D','F','G','H','J','K','L' };
     WCHAR thirdRow[] = { 'Z','X','C','V','B','N','M' };
     SetBkMode(hdc, TRANSPARENT);
-
 
     RECT rc;
     GetClientRect(hWnd, &rc);
@@ -965,7 +966,7 @@ void ColorHard(char c, double x, double y, HDC hdc)
 {
     int round = 0;
     if (letterColors.find(std::make_pair(v[0], c)) == letterColors.end() && letterColors.find(std::make_pair(v[1], c)) == letterColors.end()
-        || letterColors.find(std::make_pair(v[2], c)) == letterColors.end() && letterColors.find(std::make_pair(v[3], c)) == letterColors.end())
+        && letterColors.find(std::make_pair(v[2], c)) == letterColors.end() && letterColors.find(std::make_pair(v[3], c)) == letterColors.end())
     {
         SetDCPenColor(hdc, RGB(164, 174, 196));
         SetDCBrushColor(hdc, RGB(251, 252, 255));
@@ -1041,4 +1042,15 @@ void ColorHard(char c, double x, double y, HDC hdc)
         SelectObject(hdc, oldPen);
         DeleteObject(pen);
     }
+}
+void ClearVariables()
+{
+    for (int i = 0; i < v.size(); ++i)
+        DestroyWindow(v[i]);
+    v.clear();
+    letters.clear();
+    letterColors.clear();
+    counter = 0;
+    animation.clear();
+    xPos = yPos = 0;
 }
