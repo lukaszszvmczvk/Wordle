@@ -1,6 +1,7 @@
 #Wordle
 
 The program implements the well-known Wordle game using WinApi. However, there are 3 levels of difficulty:
+
 Level 1 - one window, 6 attempts
 Level 2 - two windows, 8 attempts
 Level 3 - four windows, 10 attempts
