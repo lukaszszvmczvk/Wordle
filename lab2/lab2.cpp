@@ -444,8 +444,6 @@ LRESULT CALLBACK WndProcChild(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
         HDC hdc = GetDC(hWnd);
         offDC = CreateCompatibleDC(hdc);
         ReleaseDC(hWnd, hdc);
-        //timers[hWnd] = timer++;
-        //SetTimer(hWnd, 7, 10, NULL);
         break;
      }
     case WM_TIMER:
@@ -479,16 +477,6 @@ LRESULT CALLBACK WndProcChild(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
         HDC hdc = BeginPaint(hWnd, &ps);
         HPEN pen = CreatePen(PS_SOLID, 2, RGB(164, 174, 196));
         HPEN oldPen = (HPEN)SelectObject(offDC, pen);
-        //if (result[hWnd] == 4)
-        //{
-        //    EndPaint(hWnd, &ps);
-        //    break;
-        //}
-        //if (result[hWnd] == 3)
-        //{
-        //    EndPaint(hWnd, &ps);
-        //    break;
-        //}
 
         RECT rc;
         GetClientRect(hWnd, &rc);
@@ -531,13 +519,6 @@ LRESULT CALLBACK WndProcChild(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
         {
             PrintPuzzle(offDC, 10, word, hWnd);
         }
-
-        //std::string str = map[hWnd];
-        //TCHAR s[6];
-        //s[str.size()] = 0;
-        //std::copy(str.begin(), str.end(), s);
-        //_stprintf_s(buf, bufSize, _T("Poprawne haslo: %s"), s);
-        //SetWindowText(hWnd, buf);
 
         if (result[hWnd] == 0)
         {
@@ -585,7 +566,6 @@ LRESULT CALLBACK WndProcChild(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
                 SelectObject(memDC, oldBitmap);
                 DeleteObject(bitmap);
             }
-            //result[hWnd] = 4;
         }
 
 
@@ -608,7 +588,6 @@ LRESULT CALLBACK WndProcChild(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
         if (offBitmap != NULL) {
             DeleteObject(offBitmap);
         }
-        //PostQuitMessage(0);
     }
         break;
     default:
